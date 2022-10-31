@@ -6,7 +6,7 @@ defmodule ExModbus.RtuClient do
   use GenServer
   require Logger
 
-  @read_timeout 5000
+  @read_timeout 3000
 
   # Public Interface
 
@@ -27,6 +27,13 @@ defmodule ExModbus.RtuClient do
   """
   def write_single_coil(pid, slave_id, address, state) do
     GenServer.call(pid, {:write_single_coil, %{slave_id: slave_id, start_address: address, state: state}})
+  end
+
+  @doc """
+  Write a single register at address. data : 16bit word value
+  """
+  def write_single_register(pid, slave_id, address, data) do
+    GenServer.call(pid, {:write_single_register, %{slave_id: slave_id, start_address: address, state: data}})
   end
 
   def write_multiple_registers(pid, slave_id, address, data) do
@@ -70,11 +77,11 @@ defmodule ExModbus.RtuClient do
     {:reply, response, serial}
   end
 
-  def handle_call({:write_single_register, %{unit_id: unit_id, start_address: address, state: data}}, _from, socket) do
+  def handle_call({:write_single_register, %{slave_id: slave_id, start_address: address, state: data}}, _from, serial) do
     response = Modbus.Packet.write_single_register(address,data)
-               |> Modbus.Tcp.wrap_packet(unit_id)
-               |> send_and_rcv_packet(socket)
-    {:reply, response, socket}
+               |> Modbus.Rtu.wrap_packet(slave_id)
+               |> send_and_rcv_packet(serial)
+    {:reply, response, serial}
   end
 
   def handle_call({:write_single_coil, %{slave_id: slave_id, start_address: address, state: state}}, _from, serial) do
@@ -113,6 +120,7 @@ defmodule ExModbus.RtuClient do
         unwrapped = Modbus.Rtu.unwrap_packet(packet)
         {:ok, data} = Modbus.Packet.parse_response_packet(unwrapped.packet)
         %{slave_id: unwrapped.slave_id, data: data}
+      {:ok , ""} -> {:error, "no reponse from slave"}
       {:ok, <<packet::binary>> = packet} ->
         {:error, "invalid packet doesn't match slave ID"}
       {:error, msg} ->

@@ -1,4 +1,6 @@
 defmodule Modbus.Packet do
+  use Bitwise
+
   @moduledoc """
   Handle Modbus packet creation and parsing.
   """
@@ -103,6 +105,20 @@ defmodule Modbus.Packet do
   end
 
 
+
+  @doc """
+    convert coil value to list
+  """
+  def coils_decode(data) do
+    for <<byte <- data>> do
+      for <<bit::size(1) <- <<byte>> >> do
+        if bit == 1, do: :on, else: :off
+      end
+    end
+      |> Enum.map(fn byte_list -> Enum.reverse(byte_list)  end)
+      |> List.flatten()
+  end
+
   @doc """
     convert [1,1,0,0, 1,0,1,0] or [:on,:off ...] to  byte value
   """
@@ -124,18 +140,17 @@ defmodule Modbus.Packet do
   @doc """
     data : [1,0,1,1,0,0,1,1,1,0 ] or [:on,:off, :on, :off]
   """
-  def write_multiple_colis(starting_address, data) do
+  def write_multiple_colis(starting_address, data) when is_list(data) do
     coil_value = data
                   |> Enum.chunk_every(8)
                   |> Enum.map(fn byte_bit_list -> Enum.reverse(byte_bit_list) end) # 작은 addr 가 LSB가 되도록 뒤집는다.
                   |> Enum.map(fn byte_bit_list -> bitlist_to_byte(byte_bit_list)  end) # bit list를 byte 로 변환
                   |> Enum.into(<<>>,fn byte -> <<byte::8>> end)
     byte_count = byte_size(coil_value)
-    coil_count = Enum.count(value_list)
+    coil_count = Enum.count(data)
 
-    <<@write_multiple_coils::8,address::16,coil_count::16,byte_count::8, coil_value::binary >>
+    <<@write_multiple_coils::8,starting_address::16,coil_count::16,byte_count::8, coil_value::binary >>
   end
-
 
 
   def write_single_register(starting_address, data) do
